@@ -19,7 +19,7 @@ function get_input_dir {
 	fi
 }
 
-function search_nothread {
+function search_nothread_argument {
     if [[ "$*" == *"-nothread"* ]]; then
         nothread="-nothread"
     else
@@ -65,13 +65,23 @@ function convert_files {
 	convert_to_relative_links
 }
 
+function move_attachments {
+	find $temp_dir -type f ! -name 'mailist*' ! -name 'msg*' ! -name 'threads*' -exec mv {} "./pdfs" \;
+}
+
+function remove_temp_dir {
+	rm -rf $temp_dir
+}
+
 function finish_script {
+	move_attachments
+	remove_temp_dir
 	echo "Conversion completed. PDF files are saved in a ./pdfs directory."
 }
 
 check_installed
 get_input_dir $@
-search_nothread $@
+search_nothread_argument $@
 create_dirs
 convert_files
 finish_script
