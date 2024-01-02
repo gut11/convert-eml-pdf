@@ -3,17 +3,17 @@
 # For this script to work it's necessary to have mhonarc and pandoc and the weasyprint pdf engine
 
 pdf_engine="weasyprint"
-temp_folder=""
-input_folder="$1"
-nothread=""
+temp_dir=""
+input_dir="$1"
+nothread="-nothread"
 
 function get_input_dir {
-	if [ "$#" -gt 2 ] || [$# -lt 1]; then
+	if [ "$#" -gt 2 ] || [ $# -lt 1 ]; then
 		echo "Usage: $0 <folder>"
 		exit 1
 	fi
-	echo $input_folder
-	if [ ! -d "$input_folder" ]; then
+	echo $input_dir
+	if [ ! -d "$input_dir" ]; then
 		echo "Error: The specified folder does not exist."
 		exit 1
 	fi
@@ -33,28 +33,40 @@ function check_installed {
 }
 
 function create_dirs {
-	temp_folder=$(mktemp -d)
+	temp_dir=$(mktemp -d)
 	mkdir -p pdfs
 }
 
-function fix_html_links {
-	find "$temp_folder" -type f -name '*.html' -exec sed '/\(<.*href="\(.*\).html".*>\)/ s/href="\(.*\).html"/href="\1.pdf"/' -i {} \;
+function convert_links_from_html_to_pdf {
+	find "$temp_dir" -type f -name '*.html' -exec sed 's/<\([^h]*\)href="\([^.]*\).html/<\1href="\2.pdf/g' -i {} \;
+}
+
+function remove_newlines {
+	find $temp_dir -type f -name "*.html" -exec sh -c 'tr -d "\n" < {} > ./temp.html && mv ./temp.html {}' \;
 }
 
 function convert_to_relative_links {
-	find -type f -name '*.pdf' -exec sed 's/\/URI (file:\/\/\/.*\/\(.*\.pdf\))/\/URI (.\/\1)/g' -i {} \; 
+	find "./pdfs/" -type f -name '*.pdf' -exec sed 's/URI (file:.*\/\(.*\)\.pdf/URI (\1.pdf/gp' -i {} \; 
+}
+
+function convert_to_pdf {
+	remove_newlines
+	convert_links_from_html_to_pdf
+	find $temp_dir -type f -name '*.html' -exec sh -c 'filename={}; pandoc --pdf-engine='$pdf_engine' --pdf-engine-opt=-q $filename -o pdfs/$(basename "$filename" .html).pdf ' \;
+}
+
+function convert_to_html {
+	find $input_dir -type f -name "*.eml" -exec mhonarc -add {} "-nodoc" $nothread -outdir $temp_dir \; 
 }
 
 function convert_files {
-	find "$input_folder" -type f -name '*.eml' -exec mhonarc $nothread -outdir "$temp_folder" {} \;
-	fix_html_links
-	find "$temp_folder" -type f -name '*.html' -exec sh -c 'filename={}; pandoc --pdf-engine='$pdf_engine' $filename -o pdfs/$(basename "$filename" .html).pdf ' \;
+	convert_to_html
+	convert_to_pdf
 	convert_to_relative_links
 }
 
 function finish_script {
-	rm -rf $temp_folder
-	echo "Conversion completed. PDF files are saved in a pdfs directory."
+	echo "Conversion completed. PDF files are saved in a ./pdfs directory."
 }
 
 check_installed
